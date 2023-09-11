@@ -18,7 +18,7 @@ def exportar_df_bq(df, dataset_tablename, gcp_project_name):
 
 
 def getListOfFiles(google_drive, id_carpeta, fileExt = None, nombre_carpeta = None):
-    """
+    '''
     Return the id from Google Drive of all files inside a folder  (includes files from subfolders too).
 
     Parameters:
@@ -29,7 +29,7 @@ def getListOfFiles(google_drive, id_carpeta, fileExt = None, nombre_carpeta = No
 
     Returns:
             allFiles (list): All the files from the folder listed.
-    """
+    '''
 
     file_list = google_drive.ListFile({'q': "'"+id_carpeta +"' in parents and trashed=false"}).GetList()
     allFiles = list()
@@ -54,3 +54,31 @@ def getListOfFiles(google_drive, id_carpeta, fileExt = None, nombre_carpeta = No
 
     allFiles = list(set(allFiles))
     return allFiles
+
+def descarga_bmx_series(serie,fechainicio,fechafin):
+    '''
+    Downloads series information from Banxico's Api.
+    
+    Parameters:
+            serie (str): Series to import
+            fechainicio (str): Start date of the series.
+            fechafin (str): End date of the series.
+
+    Returns:
+            df (dataframe): Dataframe containing the series.
+    '''
+    url = "https://www.banxico.org.mx/SieAPIRest/service/v1/series/"+serie+"/datos/"+fechainicio+"/"+fechafin
+    token = "dc06f08527080a993a39de4c3d02b594c1bc12dd1644256ad1d64231d0c62df5"
+    headers = {"Bmx-Token":token}
+    response = requests.get(url,headers = headers)
+    status = response.status_code
+    if status!= 200:
+        return print("error en la consulta, codigo{}".format(status))
+    raw_data = response.json()
+    data = raw_data["bmx"]["series"][0]["datos"]
+    df = pd.DataFrame(data)
+    df.columns = ["FECHA", "TC"]
+    df.replace('N/E', np.nan, inplace = True)
+    df["TC"] = df.TC.apply(lambda x: float(x))
+    df["FECHA"] = pd.to_datetime(df.FECHA, format = "%d/%m/%Y")
+    return df
