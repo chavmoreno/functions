@@ -82,3 +82,26 @@ def descarga_bmx_series(serie,fechainicio,fechafin):
     df["TC"] = df.TC.apply(lambda x: float(x))
     df["FECHA"] = pd.to_datetime(df.FECHA, format = "%d/%m/%Y")
     return df
+
+def busqueda_cercano(df, columna, valor, extracto = True):
+    '''
+    Returns the nearest value of another value in a dataframe.
+        
+    Parameters:
+            df (dataframe): dataframe to look up the value's neares.
+            columna (str): Column to look up the value's nearest.
+            valor (number): Value to be searched.
+            extracto (bool, optional): If it's True, retrieves an extract of the dataframe that matches with the nearest value. if It's False, It only retrieves the nearest value. Default = True
+
+    Returns:
+            cercano (number): If extracto == False returns a number.
+            df (dataframe): If extracto == True returns a dataframe.
+    '''
+    idx = (df[columna] - valor).abs().idxmin()
+    cercano = df[columna].loc[idx]
+
+    if extracto == False:
+        return cercano
+
+    if extracto == True:
+        return df[df[columna] == cercano]
