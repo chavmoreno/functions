@@ -67,6 +67,10 @@ def descarga_bmx_series(serie,fechainicio,fechafin):
     Returns:
             df (dataframe): Dataframe containing the series.
     '''
+    import requests
+    import pandas as pd
+    import numppy as np
+    
     url = "https://www.banxico.org.mx/SieAPIRest/service/v1/series/"+serie+"/datos/"+fechainicio+"/"+fechafin
     token = "dc06f08527080a993a39de4c3d02b594c1bc12dd1644256ad1d64231d0c62df5"
     headers = {"Bmx-Token":token}
