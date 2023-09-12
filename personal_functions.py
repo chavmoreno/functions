@@ -10,6 +10,8 @@ def exportar_df_bq(df, dataset_tablename, gcp_project_name):
         Returns:
                 The table uploaded to BigQuery
     '''
+    import pandas as pd
+    
     df.to_gbq(
         destination_table=dataset_tablename,
         project_id=gcp_project_name,
@@ -69,7 +71,7 @@ def descarga_bmx_series(serie,fechainicio,fechafin):
     '''
     import requests
     import pandas as pd
-    import numppy as np
+    import numpy as np
     
     url = "https://www.banxico.org.mx/SieAPIRest/service/v1/series/"+serie+"/datos/"+fechainicio+"/"+fechafin
     token = "dc06f08527080a993a39de4c3d02b594c1bc12dd1644256ad1d64231d0c62df5"
@@ -101,6 +103,8 @@ def busqueda_cercano(df, columna, valor, extracto = True):
             cercano (number): If extracto == False returns a number.
             df (dataframe): If extracto == True returns a dataframe.
     '''
+    import pandas as pd
+    
     idx = (df[columna] - valor).abs().idxmin()
     cercano = df[columna].loc[idx]
 
