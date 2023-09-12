@@ -113,3 +113,37 @@ def busqueda_cercano(df, columna, valor, extracto = True):
 
     if extracto == True:
         return df[df[columna] == cercano]
+
+
+def get_bq_tables(project_id,dataset = None):
+
+    '''
+    Get all the tables id's in a BigQuery project.
+
+        Parameters:
+                project_id (str): the project id.
+                dataset (str, optional): The name of the dataset.
+
+        Returns:
+                tables_dict (dict): A dictionary containing all the tables in each dataset of the BigQuery Project.
+                tables_list (list): A list containing all the tables from the dataset selected in that parameter.
+    '''
+
+    from google.cloud import bigquery
+    client = bigquery.Client(project=project_id)
+
+    bq_datasets = client.list_datasets()
+    tables_dict = {}
+
+    for dataset_1 in bq_datasets:
+        datasets_tables_dict = []
+        tables = []
+        for table in client.list_tables(dataset_1.dataset_id):
+            tables.append(table.table_id)
+        tables_dict[dataset_1.dataset_id] = tables
+    
+    if dataset is None:
+        return tables_dict
+    else:
+        tables_list = tables_dict[dataset]
+        return tables_list
