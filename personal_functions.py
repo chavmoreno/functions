@@ -148,8 +148,10 @@ def get_bq_tables(project_id,dataset = None):
         tables_list = tables_dict[dataset]
         return tables_list
 
-def download_and_parse_schema(folder_id, file_name):
+def download_and_parse_schema(drive,folder_id, file_name):
 
+    drive = drive
+    
     # Obtener la lista de archivos en la carpeta especificada
     lista_archivos = getListOfFiles(drive, folder_id, fileExt='txt')
 
