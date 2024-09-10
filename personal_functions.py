@@ -147,3 +147,63 @@ def get_bq_tables(project_id,dataset = None):
     else:
         tables_list = tables_dict[dataset]
         return tables_list
+
+def download_and_parse_schema(folder_id, file_name):
+
+    # Obtener la lista de archivos en la carpeta especificada
+    lista_archivos = getListOfFiles(drive, folder_id, fileExt='txt')
+
+    # Encontrar el archivo que coincide con el nombre dado
+    link = [i[1] for i in lista_archivos if i[0] == file_name]
+
+    if not link:
+        raise FileNotFoundError(f"El archivo '{file_name}' no se encontró en la carpeta con ID '{folder_id}'.")
+
+    # Descargar el archivo
+    downloaded = drive.CreateFile({'id': link[0]})
+    downloaded.GetContentFile(file_name)
+
+    # Leer el contenido del archivo de texto
+    with open(file_name, 'r') as file:
+        file_content = file.read()
+
+    # Convertir el contenido en una estructura de datos de Python (lista de diccionarios)
+    schema = ast.literal_eval(file_content)
+
+    return schema
+
+
+def load_dataframe_to_bigquery(schema, dataframe, dataset_id, table_id, project=None, write_disposition="WRITE_APPEND"):
+    from google.cloud import bigquery
+    # Convertir la lista de diccionarios a bigquery.SchemaField
+    bq_schema = []
+    for field in schema:
+        bq_schema.append(bigquery.SchemaField(
+            name=field['name'],
+            field_type=field['type'],
+            mode=field.get('mode', 'NULLABLE'),  # Default to 'NULLABLE' if not specified
+            description=field.get('description', "")
+        ))
+
+    # Configurar el LoadJobConfig con el esquema y write_disposition
+    job_config = bigquery.LoadJobConfig(
+        schema=bq_schema,
+        write_disposition=write_disposition
+    )
+
+    # Crear el cliente de BigQuery, especificando el proyecto si se proporciona
+    client = bigquery.Client(project=project) if project else bigquery.Client()
+
+    # Construir el ID completo de la tabla
+    table_full_id = f"{dataset_id}.{table_id}"
+
+    # Cargar el DataFrame en BigQuery
+    load_job = client.load_table_from_dataframe(
+        dataframe,
+        table_full_id,
+        job_config=job_config
+    )
+
+    # Esperar a que la carga se complete
+    load_job.result()
+    print(f'\033[1;32mCarga completada con éxito en la tabla {table_full_id}\033[0m')
