@@ -177,6 +177,13 @@ def download_and_parse_schema(drive,folder_id, file_name):
 
 
 def load_dataframe_to_bigquery(schema, dataframe, dataset_id, table_id, project=None, write_disposition="WRITE_APPEND"):
+    
+    import json
+    with open(schema) as file:
+        data = json.load(file) # Abre el archivo y carga el contenido como JSON
+    column_names = [column['name'] for column in data] # Extrae los nombres de las columnas
+    dataframe = dataframe[column_names] #únicamente nos quedamos en el dataframe con las columnas que están en el esquema
+    
     from google.cloud import bigquery
     # Convertir la lista de diccionarios a bigquery.SchemaField
     bq_schema = []
