@@ -1,3 +1,6 @@
+import pandas as pd
+from google.cloud import bigquery
+
 def exportar_df_bq(df, dataset_tablename, gcp_project_name):
     '''
     Uploads a pandas dataframe to a table in BigQuery. If the table aleady exists, it's replaced.
