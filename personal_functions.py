@@ -175,42 +175,209 @@ def download_and_parse_schema(drive,folder_id, file_name):
 
     return schema
 
+def align_df_and_schema(dataframe, schema):
+    """
+    Función auxiliar que:
+      - Valida si el DataFrame y el schema están vacíos.
+      - Calcula las diferencias de columnas entre el DataFrame y el schema.
+      - Filtra el DataFrame y el schema para alinearlos.
 
-def load_dataframe_to_bigquery(schema, dataframe, dataset_id, table_id, project=None, write_disposition="WRITE_APPEND"):
+    Parámetros
+    ----------
+    dataframe : pandas.DataFrame
+        El DataFrame que se desea alinear.
+    schema : list
+        Lista de diccionarios que describe el esquema de la tabla en BigQuery.
+        Cada diccionario incluye campos como: 'name', 'type', 'description', 'mode'.
+
+    Retorno
+    -------
+    dataframe : pandas.DataFrame
+        DataFrame filtrado, solo con las columnas que coinciden con el schema.
+    schema : list
+        Lista de campos del schema filtrados, para coincidir con las columnas del DataFrame.
+    df_not_in_schema : list
+        Columnas presentes en el DataFrame pero ausentes en el schema.
+    schema_not_in_df : list
+        Nombres de campo presentes en el schema pero ausentes en el DataFrame.
+    """
+
+    # 1) Validar si el DataFrame está vacío
+    if dataframe.empty:
+        print("\033[1;31mEl DataFrame está vacío; no se realizará alineación.\033[0m")
+        return dataframe, schema, [], []
+
+    # 2) Validar si el schema está vacío
+    if not schema:
+        print("\033[1;31mEl esquema está vacío; no se realizará alineación.\033[0m")
+        return dataframe, schema, [], []
+
+    # 3) Transformar a conjuntos para facilitar operaciones de diferencia/intersección
+    schema_col_names = {field['name'] for field in schema}
+    df_original_cols = set(dataframe.columns)
+
+    # 4) Hallar qué columnas NO coinciden
+    df_not_in_schema = list(df_original_cols - schema_col_names)   # Sobra en DF
+    schema_not_in_df = list(schema_col_names - df_original_cols)   # Falta en DF
+
+    # 5) Filtrar el DataFrame y el schema para mantener solo la intersección
+    valid_columns = schema_col_names & df_original_cols
+    dataframe = dataframe[list(valid_columns)]
+    schema = [field for field in schema if field['name'] in valid_columns]
+
+    return dataframe, schema, df_not_in_schema, schema_not_in_df
+
+
+def validate_dtypes(dataframe, schema):
+    """
+    Validación sencilla de tipos de datos:
+    - Si la columna está definida como INTEGER en el schema pero en el DataFrame
+      es float o string, se intenta convertir a entero (en la medida de lo posible).
+    - Para otros tipos (STRING, TIMESTAMP, etc.), solo se imprime una advertencia 
+      si no coinciden, pero no se hace conversión automática aquí.
     
-    column_names = [column['name'] for column in schema] # Extrae los nombres de las columnas
-    dataframe = dataframe[column_names] #únicamente nos quedamos en el dataframe con las columnas que están en el esquema
-    
-    from google.cloud import bigquery
-    # Convertir la lista de diccionarios a bigquery.SchemaField
+    Parámetros
+    ----------
+    dataframe : pandas.DataFrame
+        DataFrame ya filtrado según el schema.
+    schema : list
+        Lista de diccionarios que describe el esquema.
+    """
+
+    for field in schema:
+        col_name = field['name']
+        col_type = field['type'].upper()
+
+        # Si por algún motivo la columna no está en el DataFrame (aunque filtramos antes),
+        # se continúa sin procesar.
+        if col_name not in dataframe.columns:
+            continue
+
+        # Intento de conversión de float a int si el tipo esperado es INTEGER.
+        if col_type == "INTEGER":
+            if pd.api.types.is_float_dtype(dataframe[col_name]):
+                print(f"\033[1;33mConvirtiendo la columna '{col_name}' de float a entero.\033[0m")
+                try:
+                    # Usamos pd.Int64Dtype() para permitir valores nulos (NaN) 
+                    # en caso de que existan y no se puedan convertir a int.
+                    dataframe[col_name] = dataframe[col_name].astype(pd.Int64Dtype())
+                except Exception as e:
+                    print(f"\033[1;31mNo se pudo convertir la columna '{col_name}' a entero: {e}\033[0m")
+
+
+def load_dataframe_to_bigquery(
+    schema,
+    dataframe,
+    dataset_id,
+    table_id,
+    project=None,
+    write_disposition="WRITE_APPEND"
+):
+    """
+    Función principal para cargar un DataFrame de pandas en una tabla de BigQuery,
+    asegurando que DataFrame y schema estén alineados, y mostrando diferencias.
+
+    Parámetros
+    ----------
+    schema : list
+        Lista de diccionarios que describe el esquema de la tabla en BigQuery.
+        Cada diccionario incluye, por ejemplo: 'name', 'type', 'description', 'mode'...
+    dataframe : pandas.DataFrame
+        DataFrame que se desea cargar a BigQuery.
+    dataset_id : str
+        ID del dataset de BigQuery donde se encuentra (o se creará) la tabla.
+    table_id : str
+        Nombre de la tabla en BigQuery.
+    project : str, opcional
+        ID del proyecto de Google Cloud. Si no se especifica, usará el proyecto por defecto.
+    write_disposition : str, opcional
+        Define la forma de escribir en la tabla:
+        - "WRITE_APPEND": Inserta (anexa) nuevas filas.
+        - "WRITE_TRUNCATE": Borra la tabla y vuelve a crearla con los nuevos datos.
+        - "WRITE_EMPTY": Falla si la tabla ya contiene datos.
+        Por defecto, "WRITE_APPEND".
+
+    Retorno
+    -------
+    None
+    """
+
+    # -------------------------------------------------------------------------
+    # 1) Alineación del DataFrame y el schema (función auxiliar).
+    # -------------------------------------------------------------------------
+    dataframe, schema, df_not_in_schema, schema_not_in_df = align_df_and_schema(dataframe, schema)
+
+    # 2) Reportar diferencias, usando color ANSI en consola:
+    #    - rojo si hay diferencias
+    #    - verde si no
+    if schema_not_in_df:
+        print(
+            f"\033[1;31mColumnas del schema que NO estaban en el DataFrame ({len(schema_not_in_df)}): {schema_not_in_df}\033[0m"
+        )
+    else:
+        print("\033[1;32mNo hay columnas del schema que falten en el DataFrame.\033[0m")
+
+    if df_not_in_schema:
+        print(
+            f"\033[1;31mColumnas del DataFrame que NO estaban en el schema ({len(df_not_in_schema)}): {df_not_in_schema}\033[0m"
+        )
+    else:
+        print("\033[1;32mNo hay columnas del DataFrame que falten en el schema.\033[0m")
+
+    # -------------------------------------------------------------------------
+    # 3) Validación sencilla de tipos de datos en el DataFrame (opcional).
+    # -------------------------------------------------------------------------
+    validate_dtypes(dataframe, schema)
+
+    # -------------------------------------------------------------------------
+    # 4) Configurar el esquema para BigQuery (bigquery.SchemaField).
+    # -------------------------------------------------------------------------
     bq_schema = []
     for field in schema:
-        bq_schema.append(bigquery.SchemaField(
-            name=field['name'],
-            field_type=field['type'],
-            mode=field.get('mode', 'NULLABLE'),  # Default to 'NULLABLE' if not specified
-            description=field.get('description', "")
-        ))
+        bq_schema.append(
+            bigquery.SchemaField(
+                name=field['name'],
+                field_type=field['type'],
+                mode=field.get('mode', 'NULLABLE'),  # Por defecto, si 'mode' no existe, se asume NULLABLE
+                description=field.get('description', "")
+            )
+        )
 
-    # Configurar el LoadJobConfig con el esquema y write_disposition
+    # -------------------------------------------------------------------------
+    # 5) Crear el cliente de BigQuery, si no se especifica un proyecto 
+    #    se toma el proyecto por defecto de la configuración local.
+    # -------------------------------------------------------------------------
+    client = bigquery.Client(project=project) if project else bigquery.Client()
+
+    # -------------------------------------------------------------------------
+    # 6) Configurar la carga con LoadJobConfig (esquema + write_disposition).
+    # -------------------------------------------------------------------------
     job_config = bigquery.LoadJobConfig(
         schema=bq_schema,
         write_disposition=write_disposition
     )
 
-    # Crear el cliente de BigQuery, especificando el proyecto si se proporciona
-    client = bigquery.Client(project=project) if project else bigquery.Client()
-
-    # Construir el ID completo de la tabla
+    # -------------------------------------------------------------------------
+    # 7) Identificador completo de la tabla "dataset.table_id".
+    # -------------------------------------------------------------------------
     table_full_id = f"{dataset_id}.{table_id}"
 
-    # Cargar el DataFrame en BigQuery
-    load_job = client.load_table_from_dataframe(
-        dataframe,
-        table_full_id,
-        job_config=job_config
-    )
+    # -------------------------------------------------------------------------
+    # 8) Ejecutar la carga del DataFrame a BigQuery dentro de un bloque try/except.
+    # -------------------------------------------------------------------------
+    print(f"\033[1;34mIniciando carga a la tabla {table_full_id}...\033[0m")
 
-    # Esperar a que la carga se complete
-    load_job.result()
-    print(f'\033[1;32mCarga completada con éxito en la tabla {table_full_id}\033[0m')
+    try:
+        load_job = client.load_table_from_dataframe(
+            dataframe, table_full_id, job_config=job_config
+        )
+        load_job.result()  # Espera a que finalice el job de carga
+    except Exception as e:
+        print(f"\033[1;31mError al cargar los datos en BigQuery: {e}\033[0m")
+        return
+
+    # -------------------------------------------------------------------------
+    # 9) Si no hubo excepciones, se muestra el éxito en color verde.
+    # -------------------------------------------------------------------------
+    print(f"\033[1;32mCarga completada con éxito en la tabla {table_full_id}\033[0m")
+
