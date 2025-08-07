@@ -384,3 +384,20 @@ def load_dataframe_to_bigquery(
     # -------------------------------------------------------------------------
     print(f"\033[1;32mCarga completada con éxito en la tabla {table_full_id}\033[0m")
 
+def autenticacion_google():
+    #Credenciales de la cuenta de google
+    from google.auth import default
+    creds, _ = default()
+
+    #Autenticación en gspread para leer uy escribir archivos de sheets
+    import gspread
+    gc = gspread.authorize(creds)
+
+    #Conexión con drive
+    from pydrive2.auth import GoogleAuth
+    from pydrive2.drive import GoogleDrive
+    from oauth2client.client import GoogleCredentials
+    gauth = GoogleAuth()
+    gauth.credentials = GoogleCredentials.get_application_default()
+    drive = GoogleDrive(gauth)
+    return creds, _, gc, gauth, drive
